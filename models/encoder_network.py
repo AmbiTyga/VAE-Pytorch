@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import pdb
 
-class Encoder_Network(nn.Module):
+class Encoder(nn.Module):
     def __init__(self, z_dim):
         super().__init__()
         self.features = nn.Sequential(
@@ -69,5 +69,5 @@ class Encoder_Network(nn.Module):
         ''' function to get the represeantation'''
         x = self.features(x)
         x = x.view(1, -1)
-        x = x.classifier(x)
+        x = self.classifier(x)
         return x

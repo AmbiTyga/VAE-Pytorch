@@ -35,8 +35,15 @@ args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 z_dim = 200
 
+use_cuda = torch.cuda.is_available()
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
+Tensor = FloatTensor
+
+
 torch.manual_seed(args.seed)
-if args.cuda():
+if use_cuda:
     torch.cuda.manual_seed(args.seed)
 
 filenames = '/home/tanya/VAE-Pytorch/datasets/cropped_224/*.png'
@@ -73,16 +80,20 @@ class VAE(nn.Module):
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
+        z = z.view(args.batch_size, z_dim, 1, 1)
         return self.decode(z), mu, logvar
 
 model = VAE()
-if args.cuda():
+if use_cuda:
     model.cuda()
 optimizer = optim.Adam(model.parameters(), lr = args.lr)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
+A, B, C = 224, 224, 3
+image_size = A * B * C
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x, x.view(-1, image_size), size_average=False)
+    BCE = F.binary_cross_entropy(recon_x.view(-1, image_size), x.view(-1, image_size), size_average=False)
+    # BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -98,9 +109,8 @@ def train(epoch):
     train_loss = 0
     # for batch_idx, (data) in enumerate(train_loader):
     for batch_idx, (data) in enumerate(dataloader):
-        # pdb.set_trace()
-        data = Variable(data.type(torch.cuda.FloatTensor))
-        if args.cuda:
+        data = Variable(data)
+        if use_cuda:
             data = data.cuda()
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data)
@@ -113,12 +123,26 @@ def train(epoch):
                 epoch, batch_idx * len(data), len(dataloader),
                 100. * batch_idx / len(dataloader),
                 loss.data[0] / len(data)))
-            sample = Variable(torch.randn(batch_size, z_dim))
-            if args.cuda:
+            sample = Variable(torch.randn(bs, z_dim))
+            if use_cuda:
                 sample = sample.cuda()
+            sample = sample.view(bs, z_dim, 1, 1)
             sample = model.decode(sample).cpu()
-            save_image(sample.data.view(batch_size, 3, 64, 64),
+            save_image(sample.data.view(bs, 3, 224, 224),
                        'results/sample_' + str(epoch) + 'count' + str(batch_idx) + '.png')
 
     print('====> Epoch: {} Average loss: {:.4f}'.format(
           epoch, train_loss / len(dataloader)))
+
+bs = 10
+
+for epoch in range(1, args.epochs + 1):
+    train(epoch)
+    # test(epoch)
+    sample = Variable(torch.randn(bs, z_dim))
+    if use_cuda:
+        sample = sample.cuda()
+    sample = sample.view(bs, z_dim, 1, 1)
+    sample = model.decode(sample).cpu()
+    save_image(sample.data.view(bs, 3, 224, 224),
+               'results/sample_' + str(epoch) + '.png')

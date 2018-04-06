@@ -17,7 +17,7 @@ class GetDataset(data.Dataset):
         # img = np.transpose(img, (2, 0, 1))
         if self.transform is not None:
             img = self.transform(img)
-        return img.view(1, -1)
+        return img
     def __len__(self):
         return len(self.filenames)
 
