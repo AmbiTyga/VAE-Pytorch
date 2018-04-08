@@ -68,6 +68,6 @@ class Encoder(nn.Module):
     def forward(self, x):
         ''' function to get the represeantation'''
         x = self.features(x)
-        x = x.view(1, -1)
+        x = x.view(-1, 512 * 7 * 7)
         x = self.classifier(x)
         return x

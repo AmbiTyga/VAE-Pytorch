@@ -12,7 +12,6 @@ import pdb
 import h5py
 import numpy as np
 from dataloader import GetDataset
-import pdb
 from models.encoder_network import Encoder
 from models.decoder_network import Decoder
 
@@ -81,7 +80,8 @@ class VAE(nn.Module):
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        z = z.view(args.batch_size, z_dim, 1, 1)
+        # z = z.view(args.batch_size, z_dim, 1, 1)
+        z = z.view(args.batch_size, z_dim)
         return self.decode(z), mu, logvar
 
 model = VAE()
@@ -93,8 +93,8 @@ optimizer = optim.Adam(model.parameters(), lr = args.lr)
 A, B, C = 224, 224, 3
 image_size = A * B * C
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x.view(-1, image_size), x.view(-1, image_size), size_average=False)
-    # BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
+    # BCE = F.binary_cross_entropy(recon_x.view(-1, image_size), x.view(-1, image_size), size_average=False)
+    BCE = F.binary_cross_entropy(recon_x, x)
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -127,7 +127,7 @@ def train(epoch):
             sample = Variable(torch.randn(bs, z_dim))
             if use_cuda:
                 sample = sample.cuda()
-            sample = sample.view(bs, z_dim, 1, 1)
+            sample = sample.view(bs, z_dim)
             sample = model.decode(sample).cpu()
             save_image(sample.data.view(bs, 3, 224, 224),
                        'results/sample_' + str(epoch) + 'count' + str(batch_idx) + '.png')
@@ -138,12 +138,14 @@ def train(epoch):
 bs = 10
 
 for epoch in range(1, args.epochs + 1):
+    print('Learning Rate: %f' % (args.lr))
     train(epoch)
     # test(epoch)
     sample = Variable(torch.randn(bs, z_dim))
     if use_cuda:
         sample = sample.cuda()
-    sample = sample.view(bs, z_dim, 1, 1)
+    # sample = sample.view(bs, z_dim, 1, 1)
+    sample = sample.view(bs, z_dim)
     sample = model.decode(sample).cpu()
     save_image(sample.data.view(bs, 3, 224, 224),
                'results/sample_' + str(epoch) + '.png')
