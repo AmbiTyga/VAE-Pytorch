@@ -6,7 +6,7 @@ import cv2
 import pdb
 
 class GetDataset(data.Dataset):
-    def __init__(self, path, transform = None):
+    def __init__(self, path, transform = None): 
         self.filenames = glob.glob(path)
         self.transform = transform 
 

@@ -13,8 +13,8 @@ import h5py
 import numpy as np
 from dataloader import GetDataset
 import pdb
-from models.encoder_network import Encoder
-from models.decoder_network import Decoder
+from models.encoder64 import Encoder
+from models.decoder64 import Decoder
 
 
 
@@ -46,8 +46,8 @@ torch.manual_seed(args.seed)
 if use_cuda:
     torch.cuda.manual_seed(args.seed)
 
-filenames = '/home/tanya/VAE-Pytorch/datasets/cropped_224/*.png'
-# filenames = '/home/tanya/dcgan/cropped_64/*.png'
+# filenames = '/home/tanya/VAE-Pytorch/datasets/cropped_224/*.png'
+filenames = '/home/tanya/examples/dcgan/cropped_64/*.png'
 # dataset = GetDataset(filenames)
 dataset = GetDataset(filenames, transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]))
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
@@ -55,8 +55,8 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, sh
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
-        self.encoder = Encoder(z_dim)
-        self.decoder = Decoder(z_dim)
+        self.encoder = Encoder()
+        self.decoder = Decoder()
         self.mean = nn.Linear(4096, z_dim)
         self.logvar = nn.Linear(4096, z_dim)
         self.relu = nn.ReLU()
@@ -81,7 +81,7 @@ class VAE(nn.Module):
     def forward(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        z = z.view(args.batch_size, z_dim, 1, 1)
+        # z = z.view(args.batch_size, z_dim, 1, 1)
         return self.decode(z), mu, logvar
 
 model = VAE()
@@ -90,11 +90,11 @@ if use_cuda:
 optimizer = optim.Adam(model.parameters(), lr = args.lr)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
-A, B, C = 224, 224, 3
+# A, B, C = 224, 224, 3
+A, B, C = 64, 64, 3
 image_size = A * B * C
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x.view(-1, image_size), x.view(-1, image_size), size_average=False)
-    # BCE = F.binary_cross_entropy(recon_x, x, size_average=False)
+    BCE = F.binary_cross_entropy(recon_x, x)
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -127,9 +127,9 @@ def train(epoch):
             sample = Variable(torch.randn(bs, z_dim))
             if use_cuda:
                 sample = sample.cuda()
-            sample = sample.view(bs, z_dim, 1, 1)
+            sample = sample.view(bs, z_dim)
             sample = model.decode(sample).cpu()
-            save_image(sample.data.view(bs, 3, 224, 224),
+            save_image(sample.data.view(bs, C, A, B),
                        'results/sample_' + str(epoch) + 'count' + str(batch_idx) + '.png')
 
     print('====> Epoch: {} Average loss: {:.4f}'.format(
@@ -143,7 +143,7 @@ for epoch in range(1, args.epochs + 1):
     sample = Variable(torch.randn(bs, z_dim))
     if use_cuda:
         sample = sample.cuda()
-    sample = sample.view(bs, z_dim, 1, 1)
+    sample = sample.view(bs, z_dim)
     sample = model.decode(sample).cpu()
-    save_image(sample.data.view(bs, 3, 224, 224),
+    save_image(sample.data.view(bs, C, A, B),
                'results/sample_' + str(epoch) + '.png')
