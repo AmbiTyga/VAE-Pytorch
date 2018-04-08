@@ -14,6 +14,7 @@ import numpy as np
 from dataloader import GetDataset
 from models.encoder_network import Encoder
 from models.decoder_network import Decoder
+from models.discriminator import Discriminator
 
 
 
@@ -29,7 +30,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
-parser.add_argument('--lr', type = float, default = 1e-3)
+parser.add_argument('--discrim-lr', type=float, default=1e-4)
+parser.add_argument('--lr', type = float, default = 1e-4)
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 z_dim = 200
@@ -85,16 +87,25 @@ class VAE(nn.Module):
         return self.decode(z), mu, logvar
 
 model = VAE()
+discrim = Discriminator()
 if use_cuda:
     model.cuda()
+    discrim.cuda()
 optimizer = optim.Adam(model.parameters(), lr = args.lr)
+discrim_optimizer = optim.Adam(discrim.parameters(), lr = args.discrim_lr)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 A, B, C = 224, 224, 3
 image_size = A * B * C
 def loss_function(recon_x, x, mu, logvar):
     # BCE = F.binary_cross_entropy(recon_x.view(-1, image_size), x.view(-1, image_size), size_average=False)
-    BCE = F.binary_cross_entropy(recon_x, x)
+    # BCE = F.binary_cross_entropy(recon_x, x)
+    ## define the GAN loss here
+    label = Variable(torch.ones(args.batch_size).type(Tensor))
+    ## TODO: see if its a variable
+    discrim_output = discrim(recon_x)
+    BCE = F.binary_cross_entropy(discrim_output, label)
+
 
     # see Appendix B from VAE paper:
     # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -108,22 +119,44 @@ def loss_function(recon_x, x, mu, logvar):
 def train(epoch):
     model.train()
     train_loss = 0
+    discrim_loss = 0
     # for batch_idx, (data) in enumerate(train_loader):
     for batch_idx, (data) in enumerate(dataloader):
         data = Variable(data)
         if use_cuda:
             data = data.cuda()
+
+        '''Add the discirm stuff here'''
+        discrim_optimizer.zero_grad()
         optimizer.zero_grad()
         recon_batch, mu, logvar = model(data)
-        loss = loss_function(recon_batch, data, mu, logvar)
-        loss.backward()
+        recon_batch_clone = recon_batch.clone()
+        loss = loss_function(recon_batch, data, mu, logvar) # and we use the discriminator there to find the loss
+        # loss.backward()
+
+        # loss wrt the discriminator....
+        label_fake = Variable(torch.zeros(args.batch_size).type(Tensor))
+        discrim_label_fake = discrim(recon_batch_clone.detach())
+        fake_err = F.binary_cross_entropy(discrim_label_fake, label_fake)
+        fake_err.backward()
+
+        label_real = Variable(torch.ones(args.batch_size).type(Tensor))
+        discrim_label_real = discrim(data)
+        real_err = F.binary_cross_entropy(discrim_label_real, label_real)
+        real_err.backward()
+
+        err = fake_err + real_err
+        discrim_loss += err.data[0]
+       
+        # loss.backward()
         train_loss += loss.data[0]
         optimizer.step()
+        discrim_optimizer.step()
         if batch_idx % args.log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f} \t discrimLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(dataloader),
                 100. * batch_idx / len(dataloader),
-                loss.data[0] / len(data)))
+                loss.data[0] / len(data), err.data[0]/len(data)))
             sample = Variable(torch.randn(bs, z_dim))
             if use_cuda:
                 sample = sample.cuda()
