@@ -20,7 +20,7 @@ class Decoder(nn.Module):
                 nn.ReLU(True),
 
                 # input is 32x 32
-                nn.ConvTranspose2d(64, 3, kernel_size=4, padding=1, stride=2, bias=False),
+                nn.ConvTranspose2d(64, 1, kernel_size=4, padding=1, stride=2, bias=False),
                 # TODO: see if there is a need for a sigmoid here
                 # nn.ReLU(True),
                 nn.Sigmoid()

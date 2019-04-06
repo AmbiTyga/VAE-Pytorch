@@ -8,7 +8,7 @@ class Encoder(nn.Module):
         super().__init__()
         self.features = nn.Sequential(
                 # input: 64
-                nn.Conv2d(3, 64, kernel_size=4, padding=1, stride=2, bias=False), 
+                nn.Conv2d(1, 64, kernel_size=4, padding=1, stride=2, bias=False), 
                 nn.ReLU(True), 
                 # input: 32
                 nn.Conv2d(64, 64, kernel_size=4, padding=1, stride=2, bias=False),

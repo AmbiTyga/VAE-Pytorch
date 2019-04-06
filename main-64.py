@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import os
 import torch
 import torch.utils.data
 from torch import nn, optim
@@ -11,16 +12,14 @@ import pdb
 # from dataset import FrameDataset
 import h5py
 import numpy as np
-from dataloader import GetDataset
-import pdb
+from dataloader import GraphVAEDataLoader
+import ipdb
 from models.encoder64 import Encoder
 from models.decoder64 import Decoder
 
 
-
-
 parser = argparse.ArgumentParser(description='VAE Pytorch Example')
-parser.add_argument('--batch-size', type=int, default=1, metavar='N',
+parser.add_argument('--batch-size', type=int, default=16, metavar='N',
                     help='input batch size for training (default: 128)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
                     help='number of epochs to train (default: 10)')
@@ -46,10 +45,9 @@ torch.manual_seed(args.seed)
 if use_cuda:
     torch.cuda.manual_seed(args.seed)
 
-# filenames = '/home/tanya/VAE-Pytorch/datasets/cropped_224/*.png'
-filenames = '/home/tanya/examples/dcgan/cropped_64/*.png'
-# dataset = GetDataset(filenames)
-dataset = GetDataset(filenames, transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]))
+hf_file_path = os.path.expanduser('~/datasets/mnist/final_dataset_with_mask.h5')
+hf = h5py.File(hf_file_path, 'r')
+dataset = GraphVAEDataLoader(hf, Tensor, return_mask=True)
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
 class VAE(nn.Module):
@@ -91,7 +89,8 @@ optimizer = optim.Adam(model.parameters(), lr = args.lr)
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 # A, B, C = 224, 224, 3
-A, B, C = 64, 64, 3
+# A, B, C = 64, 64, 3
+A, B, C = 64, 64, 1
 image_size = A * B * C
 def loss_function(recon_x, x, mu, logvar):
     BCE = F.binary_cross_entropy(recon_x, x)
@@ -104,18 +103,21 @@ def loss_function(recon_x, x, mu, logvar):
 
     return BCE + KLD
 
+device = torch.device("cuda")
 
 def train(epoch):
     model.train()
     train_loss = 0
     # for batch_idx, (data) in enumerate(train_loader):
     for batch_idx, (data) in enumerate(dataloader):
-        data = Variable(data)
-        if use_cuda:
-            data = data.cuda()
+        input_batch = next(iter(dataloader))
+        batch_data_tensor = input_batch['image'].to(device)
+        batch_mask_tensor = input_batch['mask'].to(device)
+        batch_label_tensor = \
+                input_batch['tuple'].type(torch.LongTensor).to(device)
         optimizer.zero_grad()
-        recon_batch, mu, logvar = model(data)
-        loss = loss_function(recon_batch, data, mu, logvar)
+        recon_batch, mu, logvar = model(batch_data_tensor)
+        loss = loss_function(recon_batch, batch_data_tensor, mu, logvar)
         loss.backward()
         train_loss += loss.data[0]
         optimizer.step()
@@ -130,8 +132,8 @@ def train(epoch):
             sample = sample.view(bs, z_dim)
             sample = model.decode(sample).cpu()
             save_image(sample.data.view(bs, C, A, B),
-                       'results/sample_' + str(epoch) + 'count' + str(batch_idx) + '.png')
-
+                       'results/sample_' + 
+                       str(epoch) + 'count' + str(batch_idx) + '.png')
     print('====> Epoch: {} Average loss: {:.4f}'.format(
           epoch, train_loss / len(dataloader)))
 
